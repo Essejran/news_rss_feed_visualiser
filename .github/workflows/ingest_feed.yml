@@ -1,0 +1,32 @@
+name: Ingest Syrian Observer RSS feed
+
+on:
+  schedule:
+    # Articles are batch-published around 21:00 UTC most weekdays (observed
+    # from feed timestamps). Run once daily a few hours after that.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {} # allows manual "Run workflow" from the Actions tab
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r ingestion/requirements.txt
+
+      - name: Fetch feed and load into BigQuery
+        env:
+          GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+          GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
+          BQ_DATASET: tso_feed
+          BQ_TABLE: articles_raw
+          BQ_LOCATION: US
+        run: python ingestion/fetch_feed.py
