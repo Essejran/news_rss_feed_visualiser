@@ -1,6 +1,6 @@
 
 ---
-title: "Syrian Observer — Topic Dashboard"
+title: "Global Voices — Topic Dashboard"
 format: dashboard
 ---
 
