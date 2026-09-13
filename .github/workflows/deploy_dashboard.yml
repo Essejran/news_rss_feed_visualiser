@@ -23,7 +23,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - run: pip install -r dashboard/requirements.txt
+      - run: pip install -r ../dashboard/requirements.txt
 
       - uses: quarto-dev/quarto-actions/setup@v2
 
