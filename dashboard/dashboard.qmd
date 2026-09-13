@@ -1,7 +1,9 @@
 
 ---
 title: "Global Voices — News Trends Dashboard"
-format: dashboard
+format:
+  dashboard:
+    scrolling: true
 ---
 
 ```{python}
@@ -26,30 +28,70 @@ CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 # Single-hue sequential ramp for magnitude-only (ranked) bars.
 SEQUENTIAL_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 
+
+def finalize(fig, *, left=60, bottom=50, legend_bottom=False):
+    """Give every chart fixed margins and turn off automargin.
+
+    Quarto dashboard cards resize the plot container while the page settles
+    (fonts, flex layout). Plotly's automargin recalculates on each resize and
+    can append new axis tick groups instead of replacing the old ones, which
+    shows up as ghosted/duplicated axis labels. Fixed margins avoid that.
+    """
+    fig.update_xaxes(automargin=False)
+    fig.update_yaxes(automargin=False)
+    fig.update_layout(margin=dict(l=left, r=20, t=10, b=bottom))
+    if legend_bottom:
+        fig.update_layout(
+            legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="left", x=0, entrywidth=150)
+        )
+    return fig
+
+
+# Global Voices flattens region + country + topic + format + language into a
+# single `categories` array per article (see gv_taxonomy seed / int_article_tags
+# model). mart_tag_totals / mart_tag_daily carry a `category_type` column so we
+# can slice each dimension separately instead of treating it as one bag of tags.
+
 daily_df = bq(f"""
     select article_date, article_count
     from `{PROJECT}.{DATASET}.mart_articles_daily`
     order by article_date
 """)
 
-tags_df = bq(f"""
+topics_df = bq(f"""
     select tag, mention_count, last_mentioned
-    from `{PROJECT}.{DATASET}.mart_source_counts`
+    from `{PROJECT}.{DATASET}.mart_tag_totals`
+    where category_type = 'topic'
     order by mention_count desc
 """)
 
-top_tags = tags_df.head(6)["tag"].tolist()
-tag_color_map = dict(zip(top_tags, CATEGORICAL[: len(top_tags)]))
+regions_df = bq(f"""
+    select tag as region_name, mention_count
+    from `{PROJECT}.{DATASET}.mart_tag_totals`
+    where category_type = 'region'
+    order by mention_count desc
+""")
 
-trend_df = bq(
+countries_df = bq(f"""
+    select tag as country, region, mention_count
+    from `{PROJECT}.{DATASET}.mart_tag_totals`
+    where category_type = 'country'
+    order by mention_count desc
+    limit 15
+""")
+
+top_topics = topics_df.head(6)["tag"].tolist()
+topic_color_map = dict(zip(top_topics, CATEGORICAL[: len(top_topics)]))
+
+topic_trend_df = bq(
     f"""
     select article_date, category_name, article_count
-    from `{PROJECT}.{DATASET}.mart_category_totals`
-    where category_name in unnest(@top_tags)
+    from `{PROJECT}.{DATASET}.mart_tag_daily`
+    where category_type = 'topic' and category_name in unnest(@top_topics)
     order by article_date
     """,
     job_config=bigquery.QueryJobConfig(
-        query_parameters=[bigquery.ArrayQueryParameter("top_tags", "STRING", top_tags)]
+        query_parameters=[bigquery.ArrayQueryParameter("top_topics", "STRING", top_topics)]
     ),
 )
 
@@ -76,12 +118,17 @@ latest_df = bq(f"""
 
 total_articles = int(daily_df["article_count"].sum())
 days_covered = daily_df["article_date"].nunique()
-unique_topics = tags_df.shape[0]
-top_topic = tags_df.iloc[0]["tag"]
-top_topic_count = int(tags_df.iloc[0]["mention_count"])
+topics_covered = topics_df.shape[0]
+countries_covered = bq(f"""
+    select count(*) as n
+    from `{PROJECT}.{DATASET}.mart_tag_totals`
+    where category_type = 'country'
+""")["n"].iloc[0]
+top_topic = topics_df.iloc[0]["tag"]
+top_topic_count = int(topics_df.iloc[0]["mention_count"])
 ```
 
-## Row {height="16%"}
+## Row {height="140px"}
 
 ```{python}
 #| content: valuebox
@@ -97,8 +144,14 @@ dict(icon="calendar3", color="secondary", value=int(days_covered))
 
 ```{python}
 #| content: valuebox
-#| title: "Topics & Regions Tracked"
-dict(icon="tags-fill", color="info", value=int(unique_topics))
+#| title: "Topics Covered"
+dict(icon="tags-fill", color="info", value=int(topics_covered))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Countries Covered"
+dict(icon="globe-americas", color="success", value=int(countries_covered))
 ```
 
 ```{python}
@@ -107,7 +160,7 @@ dict(icon="tags-fill", color="info", value=int(unique_topics))
 dict(icon="star-fill", color="warning", value=f"{top_topic} ({top_topic_count})")
 ```
 
-## Row {height="26%"}
+## Row {height="280px"}
 
 ```{python}
 #| title: Daily Article Volume
@@ -120,17 +173,17 @@ fig = px.area(
     color_discrete_sequence=[CATEGORICAL[0]],
     template="plotly_white",
 )
-fig.update_traces(line_width=2, hovertemplate="%{x|%b %d, %Y}<br>%{y} articles<extra></extra>")
-fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
-fig.show()
+fig = fig.update_traces(line_width=2, hovertemplate="%{x|%b %d, %Y}<br>%{y} articles<extra></extra>")
+fig = fig.update_yaxes(dtick=1, rangemode="tozero")
+finalize(fig, left=40, bottom=40)
 ```
 
-## Row {height="30%"}
+## Row {height="480px"}
 
 ```{python}
-#| title: Top 15 Topics & Regions (All Time)
+#| title: Top 15 Topics (All Time)
 
-top15 = tags_df.head(15).sort_values("mention_count")
+top15 = topics_df.head(15).sort_values("mention_count")
 fig = px.bar(
     top15,
     x="mention_count",
@@ -141,28 +194,67 @@ fig = px.bar(
     labels={"tag": "", "mention_count": "Mentions"},
     template="plotly_white",
 )
-fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=10, b=10))
-fig.show()
+fig = fig.update_layout(coloraxis_showscale=False)
+finalize(fig, left=170, bottom=40)
 ```
 
 ```{python}
 #| title: Topic Trends Over Time (Top 6)
 
 fig = px.area(
-    trend_df,
+    topic_trend_df,
     x="article_date",
     y="article_count",
     color="category_name",
-    color_discrete_map=tag_color_map,
-    category_orders={"category_name": top_tags},
+    color_discrete_map=topic_color_map,
+    category_orders={"category_name": top_topics},
     labels={"article_date": "Date", "article_count": "Articles", "category_name": "Topic"},
     template="plotly_white",
 )
-fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=10, b=10))
-fig.show()
+fig = fig.update_layout(legend_title_text="")
+finalize(fig, left=40, bottom=110, legend_bottom=True)
 ```
 
-## Row {height="28%"}
+## Row {height="420px"}
+
+```{python}
+#| title: Regional Coverage (All Time)
+
+regions_sorted = regions_df.sort_values("mention_count")
+fig = px.bar(
+    regions_sorted,
+    x="mention_count",
+    y="region_name",
+    orientation="h",
+    color="mention_count",
+    color_continuous_scale=SEQUENTIAL_BLUE,
+    labels={"region_name": "", "mention_count": "Articles"},
+    template="plotly_white",
+)
+fig = fig.update_layout(coloraxis_showscale=False)
+finalize(fig, left=190, bottom=40)
+```
+
+```{python}
+#| title: Top Countries Covered
+
+countries_sorted = countries_df.sort_values("mention_count")
+fig = px.bar(
+    countries_sorted,
+    x="mention_count",
+    y="country",
+    orientation="h",
+    color="mention_count",
+    color_continuous_scale=SEQUENTIAL_BLUE,
+    labels={"country": "", "mention_count": "Articles"},
+    hover_data={"region": True},
+    template="plotly_white",
+)
+fig = fig.update_layout(coloraxis_showscale=False)
+finalize(fig, left=140, bottom=40)
+```
+
+## Row {height="380px"}
 
 ```{python}
 #| title: Top Contributing Authors
@@ -178,8 +270,9 @@ fig = px.bar(
     labels={"author": "", "article_count": "Articles"},
     template="plotly_white",
 )
-fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=10, b=10))
-fig.show()
+fig = fig.update_layout(coloraxis_showscale=False)
+fig = fig.update_xaxes(dtick=1)
+finalize(fig, left=120, bottom=40)
 ```
 
 ```{python}
@@ -197,5 +290,7 @@ Markdown("\n".join(rows))
 
 ::: {.card}
 Data from the [Global Voices](https://globalvoices.org) RSS feed, licensed under
-[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Region, country, and
+topic classification is derived from Global Voices' own taxonomy
+([globalvoices.org/feeds](https://globalvoices.org/feeds/)).
 :::
