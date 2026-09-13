@@ -1,39 +1,201 @@
 
 ---
-title: "Global Voices — Topic Dashboard"
+title: "Global Voices — News Trends Dashboard"
 format: dashboard
 ---
 
-## Row
-
 ```{python}
-#| title: Top 15 Topics & Regions
+#| echo: false
 from google.cloud import bigquery
+from IPython.display import Markdown
 import plotly.express as px
 
-client = bigquery.Client(project="portfolio-hub-464520")
+PROJECT = "portfolio-hub-464520"
+DATASET = "dbt_dev"
 
-df = client.query("""
-    select category_name, sum(article_count) as total_articles
-    from `portfolio-hub-464520.dbt_dev.mart_category_totals`
-    group by category_name
-    order by total_articles desc
-    limit 15
-""").to_dataframe()
+client = bigquery.Client(project=PROJECT)
 
-# ADD THIS LINE to force the runner to print the data to the GitHub logs
-print("DEBUG - FIRST 5 ROWS FROM BIGQUERY:")
-print(df.head())
 
-fig = px.bar(
-    df, 
-    x="category_name", 
-    y="total_articles",
-    color="total_articles",
-    color_continuous_scale="Teal",
-    labels={"category_name": "Category", "total_articles": "Article Count"}
+def bq(sql, job_config=None):
+    return client.query(sql, job_config=job_config).to_dataframe()
+
+
+# Fixed-order categorical palette (colorblind-validated) — never cycled or
+# reassigned when the underlying set of topics changes.
+CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+# Single-hue sequential ramp for magnitude-only (ranked) bars.
+SEQUENTIAL_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+
+daily_df = bq(f"""
+    select article_date, article_count
+    from `{PROJECT}.{DATASET}.mart_articles_daily`
+    order by article_date
+""")
+
+tags_df = bq(f"""
+    select tag, mention_count, last_mentioned
+    from `{PROJECT}.{DATASET}.mart_source_counts`
+    order by mention_count desc
+""")
+
+top_tags = tags_df.head(6)["tag"].tolist()
+tag_color_map = dict(zip(top_tags, CATEGORICAL[: len(top_tags)]))
+
+trend_df = bq(
+    f"""
+    select article_date, category_name, article_count
+    from `{PROJECT}.{DATASET}.mart_category_totals`
+    where category_name in unnest(@top_tags)
+    order by article_date
+    """,
+    job_config=bigquery.QueryJobConfig(
+        query_parameters=[bigquery.ArrayQueryParameter("top_tags", "STRING", top_tags)]
+    ),
 )
+
+author_df = bq(f"""
+    select author, count(distinct guid) as article_count
+    from `{PROJECT}.{DATASET}.stg_articles`
+    where author is not null and trim(author) != ''
+    group by author
+    order by article_count desc
+    limit 10
+""")
+
+latest_df = bq(f"""
+    select
+        pub_date,
+        title,
+        author,
+        array_to_string(tags, ', ') as topics,
+        link
+    from `{PROJECT}.{DATASET}.stg_articles`
+    order by pub_date desc
+    limit 15
+""")
+
+total_articles = int(daily_df["article_count"].sum())
+days_covered = daily_df["article_date"].nunique()
+unique_topics = tags_df.shape[0]
+top_topic = tags_df.iloc[0]["tag"]
+top_topic_count = int(tags_df.iloc[0]["mention_count"])
+```
+
+## Row {height="16%"}
+
+```{python}
+#| content: valuebox
+#| title: "Total Articles"
+dict(icon="newspaper", color="primary", value=total_articles)
+```
+
+```{python}
+#| content: valuebox
+#| title: "Days of Coverage"
+dict(icon="calendar3", color="secondary", value=int(days_covered))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Topics & Regions Tracked"
+dict(icon="tags-fill", color="info", value=int(unique_topics))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Most Covered Topic"
+dict(icon="star-fill", color="warning", value=f"{top_topic} ({top_topic_count})")
+```
+
+## Row {height="26%"}
+
+```{python}
+#| title: Daily Article Volume
+
+fig = px.area(
+    daily_df,
+    x="article_date",
+    y="article_count",
+    labels={"article_date": "Date", "article_count": "Articles"},
+    color_discrete_sequence=[CATEGORICAL[0]],
+    template="plotly_white",
+)
+fig.update_traces(line_width=2, hovertemplate="%{x|%b %d, %Y}<br>%{y} articles<extra></extra>")
+fig.update_layout(margin=dict(l=10, r=10, t=10, b=10))
 fig.show()
 ```
 
+## Row {height="30%"}
 
+```{python}
+#| title: Top 15 Topics & Regions (All Time)
+
+top15 = tags_df.head(15).sort_values("mention_count")
+fig = px.bar(
+    top15,
+    x="mention_count",
+    y="tag",
+    orientation="h",
+    color="mention_count",
+    color_continuous_scale=SEQUENTIAL_BLUE,
+    labels={"tag": "", "mention_count": "Mentions"},
+    template="plotly_white",
+)
+fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=10, b=10))
+fig.show()
+```
+
+```{python}
+#| title: Topic Trends Over Time (Top 6)
+
+fig = px.area(
+    trend_df,
+    x="article_date",
+    y="article_count",
+    color="category_name",
+    color_discrete_map=tag_color_map,
+    category_orders={"category_name": top_tags},
+    labels={"article_date": "Date", "article_count": "Articles", "category_name": "Topic"},
+    template="plotly_white",
+)
+fig.update_layout(legend_title_text="", margin=dict(l=10, r=10, t=10, b=10))
+fig.show()
+```
+
+## Row {height="28%"}
+
+```{python}
+#| title: Top Contributing Authors
+
+authors_sorted = author_df.sort_values("article_count")
+fig = px.bar(
+    authors_sorted,
+    x="article_count",
+    y="author",
+    orientation="h",
+    color="article_count",
+    color_continuous_scale=SEQUENTIAL_BLUE,
+    labels={"author": "", "article_count": "Articles"},
+    template="plotly_white",
+)
+fig.update_layout(coloraxis_showscale=False, margin=dict(l=10, r=10, t=10, b=10))
+fig.show()
+```
+
+```{python}
+#| title: Latest Headlines
+
+rows = ["| Date | Title | Author | Topics |", "|---|---|---|---|"]
+for _, row in latest_df.iterrows():
+    date_str = row["pub_date"].strftime("%Y-%m-%d")
+    title_link = f"[{row['title']}]({row['link']})"
+    author = row["author"] or "—"
+    rows.append(f"| {date_str} | {title_link} | {author} | {row['topics']} |")
+
+Markdown("\n".join(rows))
+```
+
+::: {.card}
+Data from the [Global Voices](https://globalvoices.org) RSS feed, licensed under
+[CC BY 3.0](https://creativecommons.org/licenses/by/3.0/).
+:::
