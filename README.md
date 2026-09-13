@@ -1,6 +1,6 @@
 # Global Voices Dashboard — Ingestion
 
-Public portfolio data pipeline that pulls the CC BY 3.0 licensed RSS feed from
+Public data pipeline that pulls the CC BY 3.0 licensed RSS feed from
 `https://globalvoices.org/feed/` into BigQuery on a 6-hour schedule. This serves as the
 raw landing layer for a dbt + Quarto dashboard.
 
