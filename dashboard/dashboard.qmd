@@ -4,6 +4,7 @@ title: "Global Voices — News Trends Dashboard"
 format:
   dashboard:
     scrolling: true
+    theme: theme.scss
 ---
 
 ```{python}
@@ -200,7 +201,7 @@ countries_covered = bq(f"""
 top_topic = topics_df.iloc[0]["tag"]
 ```
 
-## Row {height="140px"}
+## Row {height="205px"}
 
 ```{python}
 #| content: valuebox
