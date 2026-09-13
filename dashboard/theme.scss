@@ -1,122 +1,66 @@
 /*-- scss:defaults --*/
 
-// A calm, low-saturation neutral system instead of Bootstrap's stock
-// fully-saturated primary/success/info/warning blocks.
-$body-bg:      #f6f6f4;
-$body-color:   #24262b;
-
-$primary:      #3b5b7c; // muted slate blue
-$secondary:    #6b7280; // neutral gray
-$info:         #4a7c8c; // muted teal
-$success:      #4b7d6b; // muted sage
-$warning:      #b8874f; // muted amber
-$danger:       #a85454; // muted brick
-
-$font-family-sans-serif: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-$font-size-base: 0.92rem;
-$headings-font-weight: 600;
-
-$border-color: #e3e3de;
-$border-radius: 0.65rem;
-$border-radius-sm: 0.5rem;
-$border-radius-lg: 0.85rem;
-
-$card-border-width: 1px;
-$card-border-color: $border-color;
-$card-cap-bg: transparent;
-$card-box-shadow: none;
+// Zephyr's contextual colors are tuned for white text on a solid button,
+// not for use as text color on a near-white tinted background — three of
+// them fail WCAG contrast used that way (checked against white: secondary
+// 255,255,255 unusable; success 2.66:1; warning 1.71:1; both well under
+// the 3:1 floor for large text). Darken just those three; primary (5.65:1)
+// and info (4.57:1) are fine as zephyr ships them.
+$secondary: #6c757d;
+$success:   #1a7a54; // 5.31:1
+$warning:   #8f6208; // 5.36:1
 
 /*-- scss:rules --*/
 
-body {
-  letter-spacing: -0.01em;
+// Thin, quiet scrollbars instead of the chunky default OS ones (the
+// "up/down arrow" look) wherever a card genuinely needs to scroll.
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 4px; }
+
+// Value boxes have a fixed, known layout and should never need to
+// scroll — any overflow there is a sub-pixel font-metric difference
+// between rendering environments, not real content, so clip instead of
+// showing scroll chrome. (Chart cards are deliberately left alone: their
+// output div's own box can report a smaller height than the rendered
+// chart while the chart itself is still fully visible via overflow, so
+// hiding overflow there clips real content instead of fixing anything.)
+.bslib-value-box .card-body {
+  overflow: hidden;
 }
 
-.navbar,
-.quarto-dashboard-header {
-  background-color: #1c1e22 !important;
-  border-bottom: none !important;
-}
-
-.card {
-  box-shadow: 0 1px 2px rgba(16, 18, 22, 0.04);
-}
-
-.card .card-header {
-  border-bottom: 1px solid $border-color;
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: #52565f;
-  letter-spacing: 0;
-}
-
-// --- Value boxes -----------------------------------------------------
-// Bootstrap's stock bg-primary/bg-warning/etc. are fully saturated with
-// white text — replace with a soft tinted-background + solid-accent-text
-// treatment, and stop clipping the icon/title/value at small heights.
-
+// --- Value boxes ---------------------------------------------------
+// Zephyr's own bg-primary/bg-warning/etc. are still solid, fully
+// saturated blocks with white text. Swap in a soft tinted-background +
+// solid-accent-text treatment instead. bslib ships its own
+// `.card.valuebox.bslib-card.bg-<color>` rule (4 chained classes) that
+// hard-codes the solid look, so ours needs to match that selector's
+// specificity or it silently loses the tie.
 @function tint($color) {
-  @return rgba($color, 0.12);
+  @return rgba($color, 0.15);
 }
 
-// bslib itself ships a `.card.valuebox.bslib-card.bg-<color>` rule
-// (4 classes) that hard-codes the solid background + white text. Our
-// override needs equal-or-greater specificity to win over it, so we
-// repeat the same class chain rather than relying on `.bslib-value-box`
-// alone (only 2 classes — loses the specificity tie every time).
+$value-box-colors: (
+  "primary": $primary,
+  "secondary": $secondary,
+  "info": $info,
+  "success": $success,
+  "warning": $warning,
+);
+
 .card.valuebox.bslib-card.bslib-value-box {
-  border: 1px solid $border-color;
-  overflow: visible;
+  @each $name, $color in $value-box-colors {
+    &.bg-#{$name} {
+      background-color: tint($color) !important;
 
-  .value-box-showcase,
-  .value-box-area,
-  .value-box-grid {
-    overflow: visible;
-  }
+      .value-box-value,
+      .value-box-showcase {
+        color: $color;
+      }
 
-  .value-box-showcase {
-    font-size: 1.7rem;
-    opacity: 0.9;
-    flex: 0 0 auto;
-    padding-left: 0.9rem;
-  }
-
-  .value-box-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    white-space: normal;
-    overflow: visible;
-    margin-bottom: 0.15rem;
-  }
-
-  .value-box-value {
-    font-size: 1.55rem;
-    font-weight: 600;
-    line-height: 1.25;
-    white-space: normal;
-    overflow: visible;
-  }
-
-  &.bg-primary   { background-color: tint($primary)   !important; }
-  &.bg-secondary { background-color: tint($secondary) !important; }
-  &.bg-info      { background-color: tint($info)      !important; }
-  &.bg-success   { background-color: tint($success)   !important; }
-  &.bg-warning   { background-color: tint($warning)   !important; }
-
-  &.bg-primary   .value-box-value { color: $primary; }
-  &.bg-secondary .value-box-value { color: $secondary; }
-  &.bg-info      .value-box-value { color: $info; }
-  &.bg-success   .value-box-value { color: $success; }
-  &.bg-warning   .value-box-value { color: $warning; }
-
-  &.bg-primary   .value-box-showcase { color: $primary; }
-  &.bg-secondary .value-box-showcase { color: $secondary; }
-  &.bg-info      .value-box-showcase { color: $info; }
-  &.bg-success   .value-box-showcase { color: $success; }
-  &.bg-warning   .value-box-showcase { color: $warning; }
-
-  &.bg-primary,   &.bg-secondary, &.bg-info,
-  &.bg-success,   &.bg-warning {
-    .value-box-title { color: #3f4148; }
+      .value-box-title {
+        color: #495057;
+      }
+    }
   }
 }

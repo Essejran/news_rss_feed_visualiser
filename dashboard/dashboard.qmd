@@ -4,7 +4,7 @@ title: "Global Voices — News Trends Dashboard"
 format:
   dashboard:
     scrolling: true
-    theme: theme.scss
+    theme: [zephyr, theme.scss]
 ---
 
 ```{python}
