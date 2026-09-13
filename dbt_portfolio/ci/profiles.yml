@@ -1,0 +1,18 @@
+# dbt profile used only in CI (GitHub Actions). Local development uses
+# ~/.dbt/profiles.yml with the `dev` target instead (oauth, dbt_dev dataset)
+# — see README for setup. This file has no secrets in it: the service
+# account key is written to `gcp-key.json` by the workflow step immediately
+# before `dbt build` runs, relative to the dbt_portfolio/ working directory.
+dbt_portfolio:
+  target: prod
+  outputs:
+    prod:
+      type: bigquery
+      method: service-account
+      project: portfolio-hub-464520
+      dataset: dbt_prod
+      keyfile: gcp-key.json
+      location: US
+      threads: 4
+      job_execution_timeout_seconds: 300
+      job_retries: 1

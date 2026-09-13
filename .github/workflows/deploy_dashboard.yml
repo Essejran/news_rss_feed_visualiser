@@ -1,7 +1,7 @@
 name: Build and deploy dashboard
 
 on:
-
+  workflow_call: {} # invoked as the last step of the daily pipeline (see daily_pipeline.yml)
   workflow_dispatch: {}
 
 permissions:

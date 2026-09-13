@@ -13,7 +13,7 @@ from IPython.display import Markdown
 import plotly.express as px
 
 PROJECT = "portfolio-hub-464520"
-DATASET = "dbt_dev"
+DATASET = "dbt_prod"
 
 client = bigquery.Client(project=PROJECT)
 

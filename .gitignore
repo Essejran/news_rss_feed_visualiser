@@ -227,3 +227,7 @@ dbt-env/
 dashboard/.quarto/
 dashboard/*_files/
 dashboard/*.html
+
+# Service account keys written out by CI steps
+gcp-key.json
+dbt_portfolio/gcp-key.json

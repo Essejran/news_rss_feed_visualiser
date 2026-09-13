@@ -1,0 +1,28 @@
+name: Daily pipeline
+
+on:
+  schedule:
+    # Articles are batch-published around 21:00 UTC most weekdays (observed
+    # from feed timestamps). Run once daily a few hours after that.
+    - cron: "0 3 * * *"
+  workflow_dispatch: {} # allows manual "Run workflow" from the Actions tab
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  ingest:
+    uses: ./.github/workflows/ingest_feed.yml
+    secrets: inherit
+
+  dbt-build:
+    needs: ingest
+    uses: ./.github/workflows/dbt_build.yml
+    secrets: inherit
+
+  deploy-dashboard:
+    needs: dbt-build
+    uses: ./.github/workflows/deploy_dashboard.yml
+    secrets: inherit

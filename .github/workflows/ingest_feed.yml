@@ -1,10 +1,7 @@
 name: Ingest Global Voices RSS feed
 
 on:
-  schedule:
-    # Articles are batch-published around 21:00 UTC most weekdays (observed
-    # from feed timestamps). Run once daily a few hours after that.
-    - cron: "0 3 * * *"
+  workflow_call: {} # invoked as the first step of the daily pipeline (see daily_pipeline.yml)
   workflow_dispatch: {} # allows manual "Run workflow" from the Actions tab
 
 jobs:
