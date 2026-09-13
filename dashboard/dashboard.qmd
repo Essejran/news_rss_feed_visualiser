@@ -8,9 +8,15 @@ format:
 
 ```{python}
 #| echo: false
-from google.cloud import bigquery
-from IPython.display import Markdown
+import html as html_lib
+import io
+import re
+
+import pandas as pd
 import plotly.express as px
+from google.cloud import bigquery
+from IPython.display import Image, Markdown
+from wordcloud import STOPWORDS, WordCloud
 
 PROJECT = "portfolio-hub-464520"
 DATASET = "dbt_prod"
@@ -116,6 +122,73 @@ latest_df = bq(f"""
     limit 15
 """)
 
+
+def strip_html(raw):
+    """Drop tags/entities from content_html, leaving plain running text."""
+    return html_lib.unescape(re.sub(r"<[^>]+>", " ", raw or ""))
+
+
+# Site-wide boilerplate that would otherwise dominate the cloud: every
+# article repeats an "Originally published on Global Voices" byline and
+# photo-credit line verbatim, regardless of the story's actual content.
+GV_STOPWORDS = STOPWORDS.union(
+    {
+        "global", "voices", "globalvoices", "originally", "published",
+        "photo", "photos", "courtesy", "permission", "image", "images", "used",
+        "read", "story", "said", "also", "one", "two", "will", "new",
+        "including", "according", "told", "still", "even", "much", "made",
+        "way", "years", "year", "first", "since", "like", "people", "may",
+        "many", "us", "day", "days", "now", "say", "across", "without",
+        "part", "hour", "hours", "month", "months", "three", "use", "used",
+        "official", "public", "national", "local", "international", "around",
+        "final", "become", "remain", "percent", "left", "right",
+        "january", "february", "march", "april", "june", "july", "august",
+        "september", "october", "november", "december",
+    }
+)
+
+text_df = bq(f"""
+    select title, description, content_html
+    from `{PROJECT}.{DATASET}.stg_articles`
+""")
+
+full_text = " ".join(
+    " ".join(filter(None, [row["title"], row["description"], strip_html(row["content_html"])]))
+    for _, row in text_df.iterrows()
+)
+
+word_cloud = WordCloud(
+    width=900,
+    height=450,
+    background_color=None,
+    mode="RGBA",
+    stopwords=GV_STOPWORDS,
+    collocations=False,
+    min_word_length=3,
+    max_words=80,
+    prefer_horizontal=0.9,
+    random_state=42,
+)
+word_freqs = word_cloud.process_text(full_text)
+word_cloud = word_cloud.generate_from_frequencies(word_freqs)
+
+# Recolor with our single-hue sequential ramp (bigger word = more mentions =
+# darker blue) instead of wordcloud's default random-hue palette.
+_sizes = [size for _, size, _, _, _ in word_cloud.layout_]
+_lo, _hi = min(_sizes), max(_sizes)
+
+
+def _blue_by_size(word, font_size, position, orientation, random_state=None, **kwargs):
+    t = 0.5 if _hi == _lo else (font_size - _lo) / (_hi - _lo)
+    return SEQUENTIAL_BLUE[round(t * (len(SEQUENTIAL_BLUE) - 1))]
+
+
+word_cloud = word_cloud.recolor(color_func=_blue_by_size, random_state=42)
+
+top_words_df = pd.DataFrame(
+    sorted(word_freqs.items(), key=lambda kv: -kv[1])[:15], columns=["word", "mentions"]
+)
+
 total_articles = int(daily_df["article_count"].sum())
 days_covered = daily_df["article_date"].nunique()
 topics_covered = topics_df.shape[0]
@@ -125,7 +198,6 @@ countries_covered = bq(f"""
     where category_type = 'country'
 """)["n"].iloc[0]
 top_topic = topics_df.iloc[0]["tag"]
-top_topic_count = int(topics_df.iloc[0]["mention_count"])
 ```
 
 ## Row {height="140px"}
@@ -157,7 +229,7 @@ dict(icon="globe-americas", color="success", value=int(countries_covered))
 ```{python}
 #| content: valuebox
 #| title: "Most Covered Topic"
-dict(icon="star-fill", color="warning", value=f"{top_topic} ({top_topic_count})")
+dict(icon="star-fill", color="warning", value=top_topic)
 ```
 
 ## Row {height="280px"}
@@ -252,6 +324,33 @@ fig = px.bar(
 )
 fig = fig.update_layout(coloraxis_showscale=False)
 finalize(fig, left=140, bottom=40)
+```
+
+## Row {height="420px"}
+
+```{python}
+#| title: What Are Articles Actually About? (Word Cloud)
+
+buf = io.BytesIO()
+word_cloud.to_image().save(buf, format="PNG")
+Image(data=buf.getvalue())
+```
+
+```{python}
+#| title: Top Words in Article Text
+
+fig = px.bar(
+    top_words_df.sort_values("mentions"),
+    x="mentions",
+    y="word",
+    orientation="h",
+    color="mentions",
+    color_continuous_scale=SEQUENTIAL_BLUE,
+    labels={"word": "", "mentions": "Mentions"},
+    template="plotly_white",
+)
+fig = fig.update_layout(coloraxis_showscale=False)
+finalize(fig, left=110, bottom=40)
 ```
 
 ## Row {height="380px"}
