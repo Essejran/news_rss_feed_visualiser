@@ -2,7 +2,8 @@
 
 select
     date(pub_date) as article_date,
-    main_category,
+    tag as category_name,
     count(distinct guid) as article_count
-from {{ ref('stg_articles') }}
+from {{ ref('stg_articles') }},
+unnest(tags) as tag
 group by 1, 2
