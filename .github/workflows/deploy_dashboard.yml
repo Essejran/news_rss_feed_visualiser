@@ -1,8 +1,7 @@
 name: Build and deploy dashboard
 
 on:
-  push:
-    branches: [main]
+
   workflow_dispatch: {}
 
 permissions:
