@@ -13,7 +13,6 @@ import plotly.express as px
 
 client = bigquery.Client(project="portfolio-hub-464520")
 
-# Aggregate the unnested counts across all available dates
 df = client.query("""
     select category_name, sum(article_count) as total_articles
     from `portfolio-hub-464520.dbt_dev.mart_category_totals`
@@ -22,6 +21,10 @@ df = client.query("""
     limit 15
 """).to_dataframe()
 
+# ADD THIS LINE to force the runner to print the data to the GitHub logs
+print("DEBUG - FIRST 5 ROWS FROM BIGQUERY:")
+print(df.head())
+
 fig = px.bar(
     df, 
     x="category_name", 
@@ -29,13 +32,6 @@ fig = px.bar(
     color="total_articles",
     color_continuous_scale="Teal",
     labels={"category_name": "Category", "total_articles": "Article Count"}
-)
-
-fig.update_layout(
-    xaxis_tickangle=-45,
-    xaxis_title=None,
-    yaxis_title="Number of Articles",
-    showlegend=False
 )
 fig.show()
 ```
