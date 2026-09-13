@@ -1,0 +1,23 @@
+
+---
+title: "Syrian Observer — Topic Dashboard"
+format: dashboard
+---
+
+## Row
+
+```{python}
+from google.cloud import bigquery
+import plotly.express as px
+
+client = bigquery.Client(project="portfolio-hub-464520")
+
+df = client.query("""
+    select main_category, article_count
+    from `portfolio-hub-464520.dbt_dev.mart_category_totals`
+    order by article_count desc
+""").to_dataframe()
+
+fig = px.bar(df, x="main_category", y="article_count", title="Articles by category")
+fig.show()
+```
