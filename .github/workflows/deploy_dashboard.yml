@@ -1,0 +1,44 @@
+name: Build and deploy dashboard
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r dashboard/requirements.txt
+
+      - uses: quarto-dev/quarto-actions/setup@v2
+
+      - name: Write GCP credentials
+        run: echo '${{ secrets.GCP_SA_KEY_JSON }}' > gcp-key.json
+
+      - name: Render dashboard
+        working-directory: dashboard
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ github.workspace }}/gcp-key.json
+        run: quarto render dashboard.qmd --output index.html
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

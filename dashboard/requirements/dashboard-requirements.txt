@@ -1,0 +1,4 @@
+jupyter
+google-cloud-bigquery
+pandas
+plotly
