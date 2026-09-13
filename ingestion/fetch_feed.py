@@ -1,5 +1,5 @@
 """
-Fetch the Syrian Observer RSS feed and append it as a raw snapshot into BigQuery.
+Fetch the Global Voices RSS feed and append it as a raw snapshot into BigQuery.
 
 Design notes:
 - This is a *landing* step only: no deduplication, no transformation. Every
@@ -26,7 +26,7 @@ import requests
 from google.cloud import bigquery
 from google.oauth2 import service_account
 
-FEED_URL = "https://syrianobserver.com/feed"
+FEED_URL = "https://globalvoices.org/feed/"
 
 NS = {
     "content": "http://purl.org/rss/1.0/modules/content/",
@@ -53,7 +53,7 @@ def fetch_feed_xml() -> str:
         timeout=30,
         headers={
             # Identify the bot honestly and give a way to reach you.
-            "User-Agent": "personal-syrian-observer-dashboard/0.1 (+github.com/<your-username>/<your-repo>)"
+            "User-Agent": "personal-global-voices-dashboard/0.1 (+github.com/Essejran/news_rss_feed_visualiser)"
         },
     )
     resp.raise_for_status()
@@ -143,9 +143,9 @@ def load_rows(client: bigquery.Client, project_id: str, dataset: str, table: str
 
 def main():
     project_id = os.environ["GCP_PROJECT_ID"]
-    dataset = os.environ.get("BQ_DATASET", "syrian_observer_raw")
+    dataset = os.environ.get("BQ_DATASET", "global_voices_raw")
     table = os.environ.get("BQ_TABLE", "articles_raw")
-    location = os.environ.get("BQ_LOCATION", "US")
+    location = os.environ.get("BQ_LOCATION", "EU")
 
     pulled_at = datetime.now(timezone.utc).isoformat()
 
