@@ -1,0 +1,8 @@
+version: 2
+
+sources:
+  - name: tso_feed
+    dataset: tso_feed
+    tables:
+      - name: articles_raw
+        description: "Raw landing table from the Syrian Observer RSS feed. Append-only, not deduped — see stg_articles."
