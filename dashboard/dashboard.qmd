@@ -15,8 +15,10 @@ import re
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
+import plotly.io as pio
 from google.cloud import bigquery
-from IPython.display import Image, Markdown
+from IPython.display import Image, Markdown, display
 from wordcloud import STOPWORDS, WordCloud
 
 PROJECT = "portfolio-hub-464520"
@@ -35,23 +37,68 @@ CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 # Single-hue sequential ramp for magnitude-only (ranked) bars.
 SEQUENTIAL_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 
+# One shared chart style for every figure, instead of each chart cell
+# picking its own font/colors/background. Matches the page's own type and
+# palette instead of Plotly's generic default look.
+INK = "#3f4148"
+MUTED_INK = "#8a8d94"
+GRID = "#eceae4"
+pio.templates["gv"] = go.layout.Template(
+    layout=go.Layout(
+        font=dict(family="Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif", size=13, color=INK),
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0)",
+        colorway=CATEGORICAL,
+        margin=dict(l=60, r=20, t=10, b=50),
+        xaxis=dict(gridcolor=GRID, linecolor=GRID, zerolinecolor=GRID, tickfont=dict(color=MUTED_INK), title_font=dict(color=MUTED_INK)),
+        yaxis=dict(gridcolor=GRID, linecolor=GRID, zerolinecolor=GRID, tickfont=dict(color=MUTED_INK), title_font=dict(color=MUTED_INK)),
+        legend=dict(bgcolor="rgba(0,0,0,0)", font=dict(color=INK)),
+        hoverlabel=dict(bgcolor="white", bordercolor=GRID, font=dict(family="Inter, sans-serif", color=INK)),
+    )
+)
+pio.templates.default = "gv"
 
-def finalize(fig, *, left=60, bottom=50, legend_bottom=False):
-    """Give every chart fixed margins and turn off automargin.
+
+def finalize(fig, *, left=60, bottom=50, legend_bottom=False, caption=None):
+    """Give every chart fixed margins, turn off automargin, and (optionally)
+    add a small muted caption line explaining what the chart shows.
 
     Quarto dashboard cards resize the plot container while the page settles
     (fonts, flex layout). Plotly's automargin recalculates on each resize and
     can append new axis tick groups instead of replacing the old ones, which
     shows up as ghosted/duplicated axis labels. Fixed margins avoid that.
+
+    The caption is set as the figure's own title (rather than a separate
+    Markdown output stacked above it) because a Plotly figure fills 100% of
+    whatever space Quarto's flex layout gives its output div — it has no way
+    to know a sibling caption element already claimed some of that space, so
+    the two overlap instead of stacking. Putting the caption inside the
+    figure's own layout keeps it as one output with one height budget.
     """
     fig.update_xaxes(automargin=False)
     fig.update_yaxes(automargin=False)
-    fig.update_layout(margin=dict(l=left, r=20, t=10, b=bottom))
+    top = 10
+    if caption:
+        fig.update_layout(
+            title=dict(
+                text=f'<span style="font-weight:400; font-size:12.5px; color:{MUTED_INK}">{caption}</span>',
+                x=0, xanchor="left", y=0.98, yanchor="top",
+            )
+        )
+        top = 36
+    fig.update_layout(margin=dict(l=left, r=20, t=top, b=bottom))
     if legend_bottom:
         fig.update_layout(
             legend=dict(orientation="h", yanchor="top", y=-0.3, xanchor="left", x=0, entrywidth=150)
         )
     return fig
+
+
+def caption_line(text):
+    """A small muted caption for non-Plotly outputs (image, markdown), which
+    stack normally without the fill/overlap issue `finalize()` works around.
+    """
+    display(Markdown(f'<span style="color:{MUTED_INK}; font-size:0.82rem;">{text}</span>'))
 
 
 # Global Voices flattens region + country + topic + format + language into a
@@ -108,7 +155,7 @@ author_df = bq(f"""
     where author is not null and trim(author) != ''
     group by author
     order by article_count desc
-    limit 10
+    limit 8
 """)
 
 latest_df = bq(f"""
@@ -244,31 +291,29 @@ fig = px.area(
     y="article_count",
     labels={"article_date": "Date", "article_count": "Articles"},
     color_discrete_sequence=[CATEGORICAL[0]],
-    template="plotly_white",
 )
 fig = fig.update_traces(line_width=2, hovertemplate="%{x|%b %d, %Y}<br>%{y} articles<extra></extra>")
 fig = fig.update_yaxes(dtick=1, rangemode="tozero")
-finalize(fig, left=40, bottom=40)
+finalize(fig, left=40, bottom=40, caption="How many articles Global Voices published each day, based on our daily feed pull.")
 ```
 
-## Row {height="480px"}
+## Row {height="500px"}
 
 ```{python}
-#| title: Top 15 Topics (All Time)
+#| title: Top 10 Topics (All Time)
 
-top15 = topics_df.head(15).sort_values("mention_count")
+top10 = topics_df.head(10).sort_values("mention_count")
 fig = px.bar(
-    top15,
+    top10,
     x="mention_count",
     y="tag",
     orientation="h",
     color="mention_count",
     color_continuous_scale=SEQUENTIAL_BLUE,
     labels={"tag": "", "mention_count": "Mentions"},
-    template="plotly_white",
 )
 fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=170, bottom=40)
+finalize(fig, left=150, bottom=40, caption="The most frequently tagged subjects across every article collected so far.")
 ```
 
 ```{python}
@@ -282,13 +327,12 @@ fig = px.area(
     color_discrete_map=topic_color_map,
     category_orders={"category_name": top_topics},
     labels={"article_date": "Date", "article_count": "Articles", "category_name": "Topic"},
-    template="plotly_white",
 )
 fig = fig.update_layout(legend_title_text="")
-finalize(fig, left=40, bottom=110, legend_bottom=True)
+finalize(fig, left=40, bottom=130, legend_bottom=True, caption="Daily article counts for the six most-covered topics, stacked.")
 ```
 
-## Row {height="420px"}
+## Row {height="440px"}
 
 ```{python}
 #| title: Regional Coverage (All Time)
@@ -302,16 +346,15 @@ fig = px.bar(
     color="mention_count",
     color_continuous_scale=SEQUENTIAL_BLUE,
     labels={"region_name": "", "mention_count": "Articles"},
-    template="plotly_white",
 )
 fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=190, bottom=40)
+finalize(fig, left=170, bottom=40, caption="Articles tagged with each of Global Voices' 11 macro-regions.")
 ```
 
 ```{python}
-#| title: Top Countries Covered
+#| title: Top 10 Countries Covered
 
-countries_sorted = countries_df.sort_values("mention_count")
+countries_sorted = countries_df.head(10).sort_values("mention_count")
 fig = px.bar(
     countries_sorted,
     x="mention_count",
@@ -321,16 +364,17 @@ fig = px.bar(
     color_continuous_scale=SEQUENTIAL_BLUE,
     labels={"country": "", "mention_count": "Articles"},
     hover_data={"region": True},
-    template="plotly_white",
 )
 fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=140, bottom=40)
+finalize(fig, left=120, bottom=40, caption="Countries most frequently mentioned in article tags.")
 ```
 
-## Row {height="420px"}
+## Row {height="440px"}
 
 ```{python}
 #| title: What Are Articles Actually About? (Word Cloud)
+
+caption_line("The most common words across every article's title, summary, and full text (site boilerplate and filler words removed).")
 
 buf = io.BytesIO()
 word_cloud.to_image().save(buf, format="PNG")
@@ -338,23 +382,22 @@ Image(data=buf.getvalue())
 ```
 
 ```{python}
-#| title: Top Words in Article Text
+#| title: Top 10 Words in Article Text
 
 fig = px.bar(
-    top_words_df.sort_values("mentions"),
+    top_words_df.head(10).sort_values("mentions"),
     x="mentions",
     y="word",
     orientation="h",
     color="mentions",
     color_continuous_scale=SEQUENTIAL_BLUE,
     labels={"word": "", "mentions": "Mentions"},
-    template="plotly_white",
 )
 fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=110, bottom=40)
+finalize(fig, left=100, bottom=40, caption="Exact mention counts behind the word cloud, for the words a cloud can't show precisely.")
 ```
 
-## Row {height="380px"}
+## Row {height="420px"}
 
 ```{python}
 #| title: Top Contributing Authors
@@ -368,25 +411,30 @@ fig = px.bar(
     color="article_count",
     color_continuous_scale=SEQUENTIAL_BLUE,
     labels={"author": "", "article_count": "Articles"},
-    template="plotly_white",
 )
 fig = fig.update_layout(coloraxis_showscale=False)
 fig = fig.update_xaxes(dtick=1)
-finalize(fig, left=120, bottom=40)
+finalize(fig, left=120, bottom=40, caption="The bylines with the most published articles in the dataset so far.")
 ```
 
 ```{python}
 #| title: Latest Headlines
 
-rows = ["| Date | Title | Author | Topics |", "|---|---|---|---|"]
-for _, row in latest_df.iterrows():
-    date_str = row["pub_date"].strftime("%Y-%m-%d")
-    title_link = f"[{row['title']}]({row['link']})"
-    author = row["author"] or "—"
-    rows.append(f"| {date_str} | {title_link} | {author} | {row['topics']} |")
+caption_line("The 10 most recently published articles, linked back to the original story.")
 
-Markdown("\n".join(rows))
+items = []
+for _, row in latest_df.head(10).iterrows():
+    date_str = row["pub_date"].strftime("%b %d, %Y")
+    author = row["author"] or "—"
+    items.append(
+        f"**[{row['title']}]({row['link']})**  \n"
+        f'<span style="color:{MUTED_INK}; font-size:0.82rem;">{date_str} &nbsp;·&nbsp; {author}</span>'
+    )
+
+Markdown("\n\n---\n\n".join(items))
 ```
+
+## Row {height="70px"}
 
 ::: {.card}
 Data from the [Global Voices](https://globalvoices.org) RSS feed, licensed under
