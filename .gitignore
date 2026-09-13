@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+
+# Python virtual environments
+dbt-env/
+*/venv/
+*/.venv/
+
+# Quarto generated output
+dashboard/.quarto/
+dashboard/*_files/
+dashboard/*.html
