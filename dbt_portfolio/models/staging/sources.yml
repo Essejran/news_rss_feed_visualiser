@@ -1,8 +1,25 @@
 version: 2
 
 sources:
-  - name: tso_feed
-    dataset: tso_feed
+  - name: global_voices
+    description: "Raw landing dataset for Global Voices RSS feed snapshots pulled via GitHub Actions."
+    database: "{{ target.project }}"
+    schema: global_voices_raw
     tables:
       - name: articles_raw
-        description: "Raw landing table from the Syrian Observer RSS feed. Append-only, not deduped — see stg_articles."
+        description: "Append-only table containing incremental RSS feed snapshots."
+        columns:
+          - name: guid
+            description: "Unique item identifier provided by the RSS feed URL."
+            tests:
+              - not_null
+          - name: title
+            description: "Article title."
+          - name: link
+            description: "Canonical link to the full article on Global Voices."
+          - name: pub_date
+            description: "UTC timestamp parsed from the RSS pubDate element."
+          - name: categories
+            description: "Array of topic tags and region categories."
+          - name: pulled_at
+            description: "UTC timestamp recording when the row was ingested."

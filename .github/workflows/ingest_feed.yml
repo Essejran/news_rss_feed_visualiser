@@ -1,4 +1,4 @@
-name: Ingest Syrian Observer RSS feed
+name: Ingest Global Voices RSS feed
 
 on:
   schedule:
@@ -26,7 +26,7 @@ jobs:
         env:
           GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
           GCP_SA_KEY_JSON: ${{ secrets.GCP_SA_KEY_JSON }}
-          BQ_DATASET: tso_feed
+          BQ_DATASET: global_voices_raw
           BQ_TABLE: articles_raw
           BQ_LOCATION: US
         run: python ingestion/fetch_feed.py
