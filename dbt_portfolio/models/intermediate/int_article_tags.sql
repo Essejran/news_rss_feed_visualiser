@@ -23,6 +23,12 @@ select
     u.pub_date,
     u.tag,
     coalesce(t.category_type, 'other') as category_type,
-    t.region
+    t.region,
+    -- ISO-3166 alpha-3 code, populated for category_type = 'country' rows
+    -- only (used for choropleth map "locations"). A few disputed
+    -- territories without their own ISO entry are approximated to their
+    -- parent/related country's code (Tibet -> China, Somaliland ->
+    -- Somalia) - see dbt_portfolio/seeds/gv_taxonomy.csv for the mapping.
+    t.iso3
 from unnested u
 left join {{ ref('gv_taxonomy') }} t on u.tag = t.category_name

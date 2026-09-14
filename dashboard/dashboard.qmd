@@ -137,11 +137,10 @@ regions_df = bq(f"""
 """)
 
 countries_df = bq(f"""
-    select tag as country, region, mention_count
+    select tag as country, region, iso3, mention_count
     from `{PROJECT}.{DATASET}.mart_tag_totals`
     where category_type = 'country'
     order by mention_count desc
-    limit 15
 """)
 
 top_topics = topics_df.head(6)["tag"].tolist()
@@ -461,23 +460,46 @@ fig = fig.update_layout(coloraxis_showscale=False)
 finalize(fig, left=170, bottom=40, caption="Articles tagged with each of Global Voices' 11 macro-regions.")
 ```
 
-<!-- Top 10 Countries -->
+## Row {height="500px"}
+<!-- Country Coverage Map -->
 ```{python}
-#| title: Top 10 Countries Covered
+#| title: Country Coverage Map
 
-countries_sorted = countries_df.head(10).sort_values("mention_count")
-fig = px.bar(
-    countries_sorted,
-    x="mention_count",
-    y="country",
-    orientation="h",
+fig = px.choropleth(
+    countries_df,
+    locations="iso3",
+    locationmode="ISO-3",
     color="mention_count",
     color_continuous_scale=SEQUENTIAL_BLUE,
-    labels={"country": "", "mention_count": "Articles"},
-    hover_data={"region": True},
+    hover_name="country",
+    hover_data={"iso3": False, "mention_count": True, "region": True},
+    labels={"mention_count": "Articles", "region": "Region"},
 )
-fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=120, bottom=40, caption="Countries most frequently mentioned in article tags.")
+fig = fig.update_geos(
+    showframe=False,
+    showcoastlines=False,
+    showcountries=True,
+    countrycolor="#ffffff",
+    showland=True,
+    landcolor=GRID,
+    showocean=True,
+    oceancolor="#f4f6f5",
+    projection_type="natural earth",
+    bgcolor="rgba(0,0,0,0)",
+)
+fig = fig.update_layout(
+    coloraxis_colorbar=dict(
+        title=dict(text="Articles", side="right"),
+        thickness=14,
+        len=0.75,
+        dtick=1,
+        tickformat="d",
+    )
+)
+finalize(
+    fig, left=10, bottom=10,
+    caption="Every country mentioned in article tags — darker means more coverage. Hover any country for the exact count.",
+)
 ```
 
 ## Row
