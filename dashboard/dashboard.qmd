@@ -480,6 +480,7 @@ fig = fig.update_layout(coloraxis_showscale=False)
 finalize(fig, left=120, bottom=40, caption="Countries most frequently mentioned in article tags.")
 ```
 
+## Row
 <!-- Top Authors -->
 ```{python}
 #| title: Top Contributing Authors
