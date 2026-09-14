@@ -9,16 +9,20 @@ format:
 
 ```{python}
 #| echo: false
+import base64
 import html as html_lib
 import io
+import json
 import re
+from collections import Counter
 
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import plotly.io as pio
 from google.cloud import bigquery
-from IPython.display import Image, Markdown, display
+from IPython.display import HTML, Markdown, display
+from PIL import ImageDraw, ImageFont
 from wordcloud import STOPWORDS, WordCloud
 
 PROJECT = "portfolio-hub-464520"
@@ -36,6 +40,12 @@ def bq(sql, job_config=None):
 CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 # Single-hue sequential ramp for magnitude-only (ranked) bars.
 SEQUENTIAL_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
+# Dark, muted moss green for the daily volume trend line.
+MOSS_GREEN = "#4a5d43"
+MOSS_GREEN_FILL = "rgba(19, 104, 69, 0.64)"
+# Extra hues for topics beyond the top 6 shown in the trend chart, so the
+# Top 10 Topics bar chart doesn't need a flat "everything else" gray.
+EXTRA_TOPIC_COLORS = ["#4a3aa7", "#e34948", "#6b4226", "#1f6f78"]
 
 # One shared chart style for every figure, instead of each chart cell
 # picking its own font/colors/background. Matches the page's own type and
@@ -196,17 +206,42 @@ GV_STOPWORDS = STOPWORDS.union(
 )
 
 text_df = bq(f"""
-    select title, description, content_html
+    select guid, title, description, content_html
     from `{PROJECT}.{DATASET}.stg_articles`
 """)
 
-full_text = " ".join(
-    " ".join(filter(None, [row["title"], row["description"], strip_html(row["content_html"])]))
+# Keep text per-article (guid -> lowercased text) rather than one big blob,
+# so we can later ask "which articles mention word X" for the word cloud
+# tooltips (see top_regions_for_word below).
+article_texts = {
+    row["guid"]: " ".join(
+        filter(None, [row["title"], row["description"], strip_html(row["content_html"])])
+    ).lower()
     for _, row in text_df.iterrows()
-)
+}
+full_text = " ".join(article_texts.values())
+
+region_tags_df = bq(f"""
+    select guid, tag as region_name
+    from `{PROJECT}.{DATASET}.int_article_tags`
+    where category_type = 'region'
+""")
+guid_to_regions = region_tags_df.groupby("guid")["region_name"].apply(list).to_dict()
+
+
+def top_regions_for_word(word, n=2):
+    """Which regions come up most often in articles that mention `word`."""
+    pattern = re.compile(rf"\b{re.escape(word)}\b", re.IGNORECASE)
+    counter = Counter()
+    for guid, text in article_texts.items():
+        if pattern.search(text):
+            for region_name in guid_to_regions.get(guid, []):
+                counter[region_name] += 1
+    return [name for name, _ in counter.most_common(n)]
+
 
 word_cloud = WordCloud(
-    width=900,
+    width=1500,
     height=450,
     background_color=None,
     mode="RGBA",
@@ -280,41 +315,10 @@ dict(icon="globe-americas", color="success", value=int(countries_covered))
 dict(icon="star-fill", color="warning", value=top_topic)
 ```
 
-## Row {height="280px"}
+## Row
 
-```{python}
-#| title: Daily Article Volume
-
-fig = px.area(
-    daily_df,
-    x="article_date",
-    y="article_count",
-    labels={"article_date": "Date", "article_count": "Articles"},
-    color_discrete_sequence=[CATEGORICAL[0]],
-)
-fig = fig.update_traces(line_width=2, hovertemplate="%{x|%b %d, %Y}<br>%{y} articles<extra></extra>")
-fig = fig.update_yaxes(dtick=1, rangemode="tozero")
-finalize(fig, left=40, bottom=40, caption="How many articles Global Voices published each day, based on our daily feed pull.")
-```
 
 ## Row {height="500px"}
-
-```{python}
-#| title: Top 10 Topics (All Time)
-
-top10 = topics_df.head(10).sort_values("mention_count")
-fig = px.bar(
-    top10,
-    x="mention_count",
-    y="tag",
-    orientation="h",
-    color="mention_count",
-    color_continuous_scale=SEQUENTIAL_BLUE,
-    labels={"tag": "", "mention_count": "Mentions"},
-)
-fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=150, bottom=40, caption="The most frequently tagged subjects across every article collected so far.")
-```
 
 ```{python}
 #| title: Topic Trends Over Time (Top 6)
@@ -329,8 +333,113 @@ fig = px.area(
     labels={"article_date": "Date", "article_count": "Articles", "category_name": "Topic"},
 )
 fig = fig.update_layout(legend_title_text="")
-finalize(fig, left=40, bottom=130, legend_bottom=True, caption="Daily article counts for the six most-covered topics, stacked.")
+finalize(fig, left=40, bottom=130, legend_bottom=True, caption="Daily article counts for the six most-covered topics, stacked. Responds to the date filter above.")
 ```
+
+## Row {height="420px"}
+
+```{python}
+#| title: Top 10 Topics (All Time)
+
+top10 = topics_df.head(10).sort_values("mention_count")
+
+top10_colors = {}
+_extra = iter(EXTRA_TOPIC_COLORS)
+for tag in topics_df.head(10)["tag"]:
+    top10_colors[tag] = topic_color_map.get(tag) or next(_extra)
+
+fig = px.bar(
+    top10,
+    x="mention_count",
+    y="tag",
+    orientation="h",
+    color="tag",
+    color_discrete_map=top10_colors,
+    category_orders={"tag": topics_df.head(10)["tag"].tolist()},
+    labels={"tag": "", "mention_count": "Mentions"},
+)
+fig = fig.update_layout(showlegend=False)
+finalize(
+    fig, left=150, bottom=40,
+    caption="The most frequently tagged subjects across every article collected so far "
+    "(colors match Topic Trends Over Time above for its top 6 topics).",
+)
+```
+
+## Row
+
+```{python}
+#| title: What Are Articles Actually About? (Word Cloud)
+
+caption_line(
+    "The most common words across every article's title, summary, and full text "
+    "(site boilerplate and filler words removed). Hover the five largest words to "
+    "see which regions they're most associated with."
+)
+
+img = word_cloud.to_image()
+draw = ImageDraw.Draw(img)
+
+area_tags = []
+for (word, _freq), font_size, (y, x), orientation, _color in word_cloud.layout_[:5]:
+    font = ImageFont.truetype(word_cloud.font_path, font_size)
+    tfont = ImageFont.TransposedFont(font, orientation=orientation)
+    bbox = draw.textbbox((0, 0), word, font=tfont, anchor="lt")
+    x0, y0, x1, y1 = x, y, x + bbox[2], y + bbox[3]
+    regions = top_regions_for_word(word)
+    region_text = ", ".join(regions) if regions else "no region data yet"
+    tooltip = html_lib.escape(f"“{word}” is most associated with: {region_text}")
+    area_tags.append(
+        f'<area shape="rect" coords="{x0},{y0},{x1},{y1}" title="{tooltip}" alt="{html_lib.escape(word)}">'
+    )
+
+buf = io.BytesIO()
+img.save(buf, format="PNG")
+b64 = base64.b64encode(buf.getvalue()).decode()
+
+HTML(
+    f'<map name="wordcloud-map">{"".join(area_tags)}</map>'
+    f'<img src="data:image/png;base64,{b64}" usemap="#wordcloud-map" '
+    f'style="width:100%; max-width:{word_cloud.width}px; height:auto; display:block; margin:0 auto;" '
+    f'alt="Word cloud of common words in article text">'
+)
+```
+
+
+## Row {height="280px"}
+
+```{python}
+#| title: Daily Article Volume
+
+fig = px.area(
+    daily_df,
+    x="article_date",
+    y="article_count",
+    labels={"article_date": "Date", "article_count": "Articles"},
+    color_discrete_sequence=[MOSS_GREEN],
+)
+fig = fig.update_traces(
+    mode="lines+markers",
+    line_width=2,
+    marker=dict(size=6, color=MOSS_GREEN),
+    fillcolor=MOSS_GREEN_FILL,
+    hovertemplate="%{y} articles<extra></extra>",
+)
+fig = fig.update_yaxes(dtick=1, rangemode="tozero")
+fig = fig.update_xaxes(
+    hoverformat="%b %d, %Y",
+    showspikes=True,
+    spikemode="across",
+    spikesnap="cursor",
+    spikethickness=1,
+    spikedash="solid",
+    spikecolor=MUTED_INK,
+)
+fig = fig.update_layout(hovermode="x unified")
+finalize(fig, left=40, bottom=40, caption="How many articles Global Voices published each day. Responds to the date filter above. Hover anywhere along a date's vertical line to see the count.")
+```
+
+
 
 ## Row {height="440px"}
 
@@ -369,35 +478,6 @@ fig = fig.update_layout(coloraxis_showscale=False)
 finalize(fig, left=120, bottom=40, caption="Countries most frequently mentioned in article tags.")
 ```
 
-## Row {height="440px"}
-
-```{python}
-#| title: What Are Articles Actually About? (Word Cloud)
-
-caption_line("The most common words across every article's title, summary, and full text (site boilerplate and filler words removed).")
-
-buf = io.BytesIO()
-word_cloud.to_image().save(buf, format="PNG")
-Image(data=buf.getvalue())
-```
-
-```{python}
-#| title: Top 10 Words in Article Text
-
-fig = px.bar(
-    top_words_df.head(10).sort_values("mentions"),
-    x="mentions",
-    y="word",
-    orientation="h",
-    color="mentions",
-    color_continuous_scale=SEQUENTIAL_BLUE,
-    labels={"word": "", "mentions": "Mentions"},
-)
-fig = fig.update_layout(coloraxis_showscale=False)
-finalize(fig, left=100, bottom=40, caption="Exact mention counts behind the word cloud, for the words a cloud can't show precisely.")
-```
-
-## Row {height="420px"}
 
 ```{python}
 #| title: Top Contributing Authors
@@ -416,6 +496,8 @@ fig = fig.update_layout(coloraxis_showscale=False)
 fig = fig.update_xaxes(dtick=1)
 finalize(fig, left=120, bottom=40, caption="The bylines with the most published articles in the dataset so far.")
 ```
+
+## Row {height="360px"}
 
 ```{python}
 #| title: Latest Headlines

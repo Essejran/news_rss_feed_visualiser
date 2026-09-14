@@ -18,15 +18,17 @@ $warning:   #8f6208; // 5.36:1
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(0, 0, 0, 0.18); border-radius: 4px; }
 
-// Value boxes have a fixed, known layout and should never need to
-// scroll — any overflow there is a sub-pixel font-metric difference
-// between rendering environments, not real content, so clip instead of
-// showing scroll chrome. (Chart cards are deliberately left alone: their
-// output div's own box can report a smaller height than the rendered
-// chart while the chart itself is still fully visible via overflow, so
-// hiding overflow there clips real content instead of fixing anything.)
-.bslib-value-box .card-body {
+// Every card has a fixed, known layout and should never need to scroll —
+// any overflow is a sub-pixel font-metric difference between rendering
+// environments, not real content, so clip instead of showing scroll
+// chrome. Latest Headlines is the one deliberate exception: it's a list
+// of 10 entries in a compact card and is meant to scroll.
+.card-body.html-fill-item {
   overflow: hidden;
+}
+
+.card[data-title="Latest Headlines"] .card-body {
+  overflow-y: auto;
 }
 
 // --- Value boxes ---------------------------------------------------
