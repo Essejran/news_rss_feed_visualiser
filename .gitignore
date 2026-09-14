@@ -227,6 +227,7 @@ dbt-env/
 dashboard/.quarto/
 dashboard/*_files/
 dashboard/*.html
+dashboard/*.quarto_ipynb
 
 # Service account keys written out by CI steps
 gcp-key.json

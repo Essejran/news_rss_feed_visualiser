@@ -12,6 +12,15 @@ $warning:   #8f6208; // 5.36:1
 
 /*-- scss:rules --*/
 
+// Same moss green as the Daily Article Volume line (dashboard.qmd's
+// MOSS_GREEN, #4a5d43) - kept as a plain hex here since Python constants
+// aren't visible to this SCSS file. Targets .navbar directly instead of
+// overriding $primary, so it doesn't also recolor the "Total Articles"
+// value box (which uses color="primary").
+.navbar {
+  background-color: #4a5d43 !important;
+}
+
 // Thin, quiet scrollbars instead of the chunky default OS ones (the
 // "up/down arrow" look) wherever a card genuinely needs to scroll.
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -51,6 +60,22 @@ $value-box-colors: (
 );
 
 .card.valuebox.bslib-card.bslib-value-box {
+  // bslib ships three competing font-size rules for .value-box-value and
+  // .value-box-showcase (plain rem, a vw-based calc, and a container-query
+  // clamp() using cqw/cqh units) - whichever wins depends on which of
+  // bslib/bootstrap's layers loaded last, and in practice it picked an
+  // oversized value here (a 4rem icon in a ~120px-tall box, and a value
+  // font that doesn't leave "Human Rights" room to sit on one line).
+  // Pin both to fixed sizes so they don't depend on that resolution.
+  .value-box-value {
+    font-size: 1.4rem !important;
+    line-height: 1.25;
+  }
+
+  .value-box-showcase .bi {
+    font-size: 1.8rem !important;
+  }
+
   @each $name, $color in $value-box-colors {
     &.bg-#{$name} {
       background-color: tint($color) !important;

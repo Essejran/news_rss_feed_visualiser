@@ -37,15 +37,15 @@ def bq(sql, job_config=None):
 
 # Fixed-order categorical palette (colorblind-validated) — never cycled or
 # reassigned when the underlying set of topics changes.
-CATEGORICAL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
+CATEGORICAL = px.colors.qualitative.Pastel
 # Single-hue sequential ramp for magnitude-only (ranked) bars.
 SEQUENTIAL_BLUE = ["#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#256abf", "#184f95", "#0d366b"]
 # Dark, muted moss green for the daily volume trend line.
 MOSS_GREEN = "#4a5d43"
-MOSS_GREEN_FILL = "rgba(19, 104, 69, 0.64)"
+MOSS_GREEN_FILL = "rgba(14, 74, 49, 0.6)"
 # Extra hues for topics beyond the top 6 shown in the trend chart, so the
 # Top 10 Topics bar chart doesn't need a flat "everything else" gray.
-EXTRA_TOPIC_COLORS = ["#4a3aa7", "#e34948", "#6b4226", "#1f6f78"]
+EXTRA_TOPIC_COLORS = px.colors.qualitative.Pastel[7:]
 
 # One shared chart style for every figure, instead of each chart cell
 # picking its own font/colors/background. Matches the page's own type and
@@ -441,6 +441,49 @@ finalize(
 
 
 
+## Row {height="500px"}
+<!-- Country Coverage Map -->
+```{python}
+#| title: Country Coverage Map
+
+fig = px.choropleth(
+    countries_df,
+    locations="iso3",
+    locationmode="ISO-3",
+    color="mention_count",
+    color_continuous_scale="Magenta",
+    hover_name="country",
+    hover_data={"iso3": False, "mention_count": True, "region": True},
+    labels={"mention_count": "Mentions", "region": "Region"},
+)
+fig = fig.update_geos(
+    showframe=False,
+    showcoastlines=False,
+    showcountries=True,
+    countrycolor="#d3e1e3",
+    showland=True,
+    landcolor=GRID,
+    showocean=True,
+    oceancolor="#68a7b3",
+    projection_type="natural earth",
+    bgcolor="rgba(0,0,0,0)",
+)
+fig = fig.update_layout(
+    coloraxis_colorbar=dict(
+        title=dict(text="Mentions", side="right"),
+        thickness=14,
+        len=0.75,
+        dtick=1,
+        tickformat="d",
+    )
+)
+finalize(
+    fig, left=10, bottom=10,
+    caption="Every country mentioned in article tags — drag to rotate globe, scroll to zoom. Darker means more coverage. Hover any country for the exact count.",
+)
+```
+
+
 ## Row {height="440px"}
 <!-- Regional Coverage -->
 ```{python}
@@ -453,53 +496,11 @@ fig = px.bar(
     y="region_name",
     orientation="h",
     color="mention_count",
-    color_continuous_scale=SEQUENTIAL_BLUE,
-    labels={"region_name": "", "mention_count": "Articles"},
+    color_continuous_scale="Magenta",
+    labels={"region_name": "", "mention_count": "Mentions"},
 )
 fig = fig.update_layout(coloraxis_showscale=False)
 finalize(fig, left=170, bottom=40, caption="Articles tagged with each of Global Voices' 11 macro-regions.")
-```
-
-## Row {height="500px"}
-<!-- Country Coverage Map -->
-```{python}
-#| title: Country Coverage Map
-
-fig = px.choropleth(
-    countries_df,
-    locations="iso3",
-    locationmode="ISO-3",
-    color="mention_count",
-    color_continuous_scale=SEQUENTIAL_BLUE,
-    hover_name="country",
-    hover_data={"iso3": False, "mention_count": True, "region": True},
-    labels={"mention_count": "Articles", "region": "Region"},
-)
-fig = fig.update_geos(
-    showframe=False,
-    showcoastlines=False,
-    showcountries=True,
-    countrycolor="#ffffff",
-    showland=True,
-    landcolor=GRID,
-    showocean=True,
-    oceancolor="#f4f6f5",
-    projection_type="natural earth",
-    bgcolor="rgba(0,0,0,0)",
-)
-fig = fig.update_layout(
-    coloraxis_colorbar=dict(
-        title=dict(text="Articles", side="right"),
-        thickness=14,
-        len=0.75,
-        dtick=1,
-        tickformat="d",
-    )
-)
-finalize(
-    fig, left=10, bottom=10,
-    caption="Every country mentioned in article tags — darker means more coverage. Hover any country for the exact count.",
-)
 ```
 
 ## Row
@@ -507,19 +508,16 @@ finalize(
 ```{python}
 #| title: Top Contributing Authors
 
-authors_sorted = author_df.sort_values("article_count")
-fig = px.bar(
-    authors_sorted,
-    x="article_count",
-    y="author",
-    orientation="h",
-    color="article_count",
-    color_continuous_scale=SEQUENTIAL_BLUE,
-    labels={"author": "", "article_count": "Articles"},
-)
-fig = fig.update_layout(coloraxis_showscale=False)
-fig = fig.update_xaxes(dtick=1)
-finalize(fig, left=120, bottom=40, caption="The bylines with the most published articles in the dataset so far.")
+caption_line("The 5 authors with the most published articles in the dataset so far.")
+
+top5_authors = author_df.sort_values("article_count", ascending=False).head(5)
+
+items = [
+    f"{i}. **{row['author']}** — {row['article_count']} article{'s' if row['article_count'] != 1 else ''}"
+    for i, (_, row) in enumerate(top5_authors.iterrows(), start=1)
+]
+
+Markdown("\n".join(items))
 ```
 
 ## Row {height="360px"}
@@ -541,10 +539,10 @@ for _, row in latest_df.head(10).iterrows():
 Markdown("\n\n---\n\n".join(items))
 ```
 
-## Row {height="70px"}
+## Row 
 <!-- Source / License Disclaimer -->
 ::: {.card}
-Data from the [Global Voices](https://globalvoices.org) RSS feed, licensed under
+Dataset start date: 01 Sep 2026. Data ingestion daily from the [Global Voices](https://globalvoices.org) RSS feed, licensed under
 [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/). Region, country, and
 topic classification is derived from Global Voices' own taxonomy
 ([globalvoices.org/feeds](https://globalvoices.org/feeds/)).
